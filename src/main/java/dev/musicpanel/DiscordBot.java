@@ -3,7 +3,6 @@ package dev.musicpanel;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import moe.kyokobot.libdave.DaveFactory;
 import moe.kyokobot.libdave.NativeDaveFactory;
-import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.Permission;
@@ -70,7 +69,7 @@ final class DiscordBot extends ListenerAdapter {
                 .enableCache(CacheFlag.VOICE_STATE)
                 .setMemberCachePolicy(MemberCachePolicy.VOICE)
                 .setAudioModuleConfig(new AudioModuleConfig()
-                        .withDaveSessionFactory(new LDJDADaveSessionFactory(dave)))
+                        .withDaveSessionFactory(new DaveFix(dave, () -> jda, plugin.getLogger())))
                 .setActivity(Activity.listening(cfg.getString("discord.activity", "/play")))
                 .addEventListeners(this)
                 .build();
