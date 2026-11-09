@@ -48,21 +48,32 @@ jobs:
           echo "Built youtube-source $VERSION"
           echo "YT_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      # ── 2a. Speech recognition: use whatever version Maven Central currently lists ───────────────
-      - name: Choose speech library version
+      # ── 2a. Speech recognition: use whatever versions Maven Central currently lists ──────────────
+      # Vosk needs JNA to compile against (Vosk's classes extend com.sun.jna.PointerType, and Maven
+      # doesn't pass on the dependencies of a "provided" library).
+      - name: Choose speech library versions
         run: |
           set -u
-          META=https://repo1.maven.org/maven2/com/alphacephei/vosk/maven-metadata.xml
-          VERSION="$(curl -fsSL --retry 3 "$META" | sed -n 's:.*<release>\(.*\)</release>.*:\1:p' | head -n1 || true)"
-          if [ -z "$VERSION" ]; then
-            echo "::warning::Could not read the Vosk version list - using the version from pom.xml"
-            exit 0
-          fi
-          if curl -fsIL -o /dev/null "https://repo1.maven.org/maven2/com/alphacephei/vosk/$VERSION/vosk-$VERSION.pom"; then
-            echo "Using Vosk $VERSION"
-            echo "VOSK_ARGS=-Dvosk.version=$VERSION" >> "$GITHUB_ENV"
+          CENTRAL=https://repo1.maven.org/maven2
+          # newest($1 = group path, $2 = artifact) -> prints the released version, or nothing
+          newest() {
+            curl -fsSL --retry 3 "$CENTRAL/$1/$2/maven-metadata.xml" 2>/dev/null \
+              | sed -n 's:.*<release>\(.*\)</release>.*:\1:p' | head -n1
+          }
+          VOSK="$(newest com/alphacephei vosk || true)"
+          if [ -n "$VOSK" ] && curl -fsIL -o /dev/null "$CENTRAL/com/alphacephei/vosk/$VOSK/vosk-$VOSK.pom"; then
+            echo "Using Vosk $VOSK"
+            echo "SPEECH_ARGS=-Dvosk.version=$VOSK" >> "$GITHUB_ENV"
           else
-            echo "::warning::Vosk $VERSION has no .pom - using the version from pom.xml"
+            echo "::warning::Could not confirm a Vosk version on Maven Central - using the one from pom.xml"
+          fi
+
+          JNA="$(newest net/java/dev/jna jna || true)"
+          if [ -n "$JNA" ] && curl -fsIL -o /dev/null "$CENTRAL/net/java/dev/jna/jna/$JNA/jna-$JNA.pom"; then
+            echo "Using JNA $JNA"
+            echo "JNA_ARGS=-Djna.version=$JNA" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not confirm a JNA version on Maven Central - using the one from pom.xml"
           fi
 
       # ── 2b. DAVE (Discord's voice encryption): use the newest release that is really published ───
@@ -99,7 +110,7 @@ jobs:
           set -u
           YT_ARGS=""
           if [ -n "${YT_VERSION:-}" ]; then YT_ARGS="-Dyoutube.source.version=$YT_VERSION"; fi
-          BASE_ARGS="$YT_ARGS ${VOSK_ARGS:-}"
+          BASE_ARGS="$YT_ARGS ${SPEECH_ARGS:-} ${JNA_ARGS:-}"
           # shellcheck disable=SC2086
           if ! mvn -B -ntp clean package $BASE_ARGS ${LIBDAVE_ARGS:-}; then
             if [ -n "${LIBDAVE_ARGS:-}" ]; then
@@ -127,6 +138,7 @@ jobs:
           done
           # The speech library must NOT be inside the jar: Paper downloads it at runtime.
           if echo "$LIST" | grep -q "org/vosk/"; then echo "Vosk was shaded into the jar by mistake"; exit 1; fi
+          if echo "$LIST" | grep -q "com/sun/jna/"; then echo "JNA was shaded into the jar by mistake"; exit 1; fi
           # plugin.yml must have a real version, not the unreplaced placeholder.
           unzip -p "$JAR" plugin.yml | grep -n "alphacephei" || true
           if unzip -p "$JAR" plugin.yml | grep -q '\${'; then echo "plugin.yml still has an unreplaced \${...}"; exit 1; fi
