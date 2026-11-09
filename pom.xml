@@ -26,6 +26,12 @@
           version Maven Central currently lists.
         -->
         <vosk.version>0.3.45</vosk.version>
+        <!--
+          Vosk's classes extend com.sun.jna.PointerType, and Maven does NOT pass on the
+          dependencies of a "provided" library, so JNA has to be named here for compiling.
+          Only needed to compile: at runtime Paper pulls it in together with Vosk.
+        -->
+        <jna.version>5.13.0</jna.version>
 
         <!--
           YouTube support. YouTube moved to SABR-only streaming formats in Sept 2026, which the last tagged
@@ -137,6 +143,12 @@
             <groupId>com.alphacephei</groupId>
             <artifactId>vosk</artifactId>
             <version>${vosk.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+            <version>${jna.version}</version>
             <scope>provided</scope>
         </dependency>
 
